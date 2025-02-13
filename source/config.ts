@@ -7,7 +7,7 @@ const PKGROOT = path.join(
     __dirname,
     __dirname.includes('dist') ? '../..' : '..'
 );
-export const config: Config = {
+export const config: Omit<Config, 'PKG_ROOT'> = {
     token: env.get('RSSBOT_TOKEN').required().asString(),
     proxy: {
         protocol: env.get('PROXY_PROTOCOL').asString(),
@@ -35,17 +35,15 @@ export const config: Config = {
     not_send: env.get('NOT_SEND').default(0).asBool(), // just for debug use
     concurrency: env.get('RSSBOT_CONCURRENCY').default(200).asIntPositive(),
     delete_on_err_send: env.get('DELETE_ON_ERR_SEND').default(1).asBool(), // block and chat not found
-    before_resp_timeout: env
-        .get('RSSBOT_BEFORE_RESP_TIMEOUT')
-        .default(3)
-        .asIntPositive(),
     resp_timeout: env.get('RSSBOT_RESP_TIMEOUT').default(40).asIntPositive(),
     allow_list: env
         .get('RSSBOT_ALLOW_LIST')
         .default('')
         .asArray(',')
         .map((id) => Number(id)),
-    auto_migrate: env.get('AUTO_MIGRATE').default(1).asBool()
+    auto_migrate: env.get('AUTO_MIGRATE').default(1).asBool(),
+    sentry_dsn: env.get('SENTRY_DSN').default('').asString(),
+    enable_throttle: env.get('ENABLE_THROTTLE').default(0).asBool()
 };
 Object.defineProperty(config, 'PKG_ROOT', {
     enumerable: false,

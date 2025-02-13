@@ -1,4 +1,5 @@
-import Telegraf from 'telegraf';
+import { Telegraf } from 'telegraf';
+import { telegrafThrottler } from 'telegraf-throttler';
 import { fork } from 'child_process';
 import { join } from 'path';
 import * as pkg from '../package.json';
@@ -7,7 +8,7 @@ import logger from './utils/logger';
 import errors from './utils/errors';
 import i18n from './i18n';
 import { initDB } from './database';
-import cleanStack from 'clean-stack';
+import cleanStack from '@cjsa/clean-stack';
 import { replyKeyboard, changeLangCallback } from './controlers/language';
 import {
     getUrlById,
@@ -34,7 +35,7 @@ import subMultiUrl from './middlewares/sub-multi-url';
 import exportToOpml from './middlewares/export-to-opml';
 import importFromOpml from './middlewares/import-from-opml';
 import userAllowList from './middlewares/user_allow_list';
-import { MContext, Next } from './types/ctx';
+import { MContext, TNextFn } from './types/ctx';
 import twoKeyReply from './utils/two-key-reply';
 import {
     isChangeFeedUrl,
@@ -52,16 +53,18 @@ const bot = new Telegraf(token, {
     }
 });
 
-bot.catch((err: Error) => logger.error(cleanStack(err.stack) || err.message));
-
-// for handling command form group
-bot.telegram.getMe().then((botInfo) => {
-    bot.options.username = botInfo.username;
+bot.catch((err: Error) => {
+    logger.error(cleanStack(err.stack) || err.message);
 });
 
+const throttler = telegrafThrottler();
+
+if (config.enable_throttle) {
+    bot.use(throttler);
+}
 bot.use(userAllowList);
 
-bot.command('start', sendError, async (ctx: MContext) => {
+bot.command('start', sendError, async (ctx) => {
     const builder = [];
     const { lang } = ctx.state;
     builder.push(i18n[lang]['WELCOME']);
@@ -76,7 +79,7 @@ bot.command('start', sendError, async (ctx: MContext) => {
     await ctx.replyWithMarkdown(builder.join('\n'));
 });
 
-bot.command('help', sendError, async (ctx: MContext) => {
+bot.command('help', sendError, async (ctx) => {
     const builder = [];
     const { lang } = ctx.state;
     builder.push(i18n[lang]['SUB_USAGE']);
@@ -107,7 +110,7 @@ bot.command('import', importReply);
 
 bot.on(
     'document',
-    async (ctx: MContext, next) => {
+    async (ctx, next) => {
         ctx.state.chat = await ctx.getChat();
         if (ctx.state.chat.type === 'private') {
             await next();
@@ -168,7 +171,7 @@ bot.command(
 bot.command('lang', sendError, isAdmin, replyKeyboard);
 
 bot.command(
-    'heath',
+    'health',
     sendError,
     onlyPrivateChat,
     isAdmin,
@@ -179,14 +182,14 @@ bot.action(/^CHANGE_LANG[\w_]+/, changeLangCallback);
 
 bot.hears(
     /(((https?:(?:\/\/)?)(?:[-;:&=+$,\w]+@)?[A-Za-z0-9.-]+|(?:www\.|[-;:&=+$,\w]+@)[A-Za-z0-9.-]+)((?:\/[+~%/.\w\-_]*)?\??(?:[-+=&;%@.\w_]*)#?(?:[.!/\\\w]*))?)/gm,
-    async (ctx: MContext, next: Next) => {
+    async (ctx, next: TNextFn) => {
         ctx.state.chat = await ctx.getChat();
         if (ctx.state.chat.type === 'private') {
             await next();
         }
     },
     async (ctx: MContext, next) => {
-        if (!ctx.message.text.startsWith('/')) {
+        if ('text' in ctx.message && !ctx.message.text.startsWith('/')) {
             await next();
         }
     },
@@ -203,7 +206,6 @@ bot.action(
     unsubAll,
     async (ctx: MContext, next) => {
         const cb = ctx.callbackQuery;
-        // @ts-ignore
         ctx.telegram.answerCbQuery(cb.id);
         await next();
     }
@@ -211,7 +213,6 @@ bot.action(
 
 bot.action('UNSUB_ALL_NO', async (ctx: MContext, next) => {
     const cb = ctx.callbackQuery;
-    // @ts-ignore
     ctx.telegram.answerCbQuery(cb.id, i18n[lang]['CANCEL']);
     await ctx.telegram.deleteMessage(cb.message.chat.id, cb.message.message_id);
     await next();
@@ -223,12 +224,14 @@ bot.action(
     onlyPrivateChat,
     async (ctx: MContext, next) => {
         const cb = ctx.callbackQuery;
-        ctx.state.viewallPage = parseInt(cb.data.split('_')[1]);
-        await ctx.telegram.deleteMessage(
-            cb.message.chat.id,
-            cb.message.message_id
-        );
-        await next();
+        if ('data' in cb) {
+            ctx.state.viewallPage = parseInt(cb.data.split('_')[1]);
+            await ctx.telegram.deleteMessage(
+                cb.message.chat.id,
+                cb.message.message_id
+            );
+            await next();
+        }
     },
     viewAll
 );
@@ -239,14 +242,16 @@ bot.action(
     isAdmin,
     async (ctx: MContext, next) => {
         const cb = ctx.callbackQuery;
-        const splitedStr = cb.data.split('_');
-        if (splitedStr[1] === 'RAW') ctx.state.showRaw = true;
-        ctx.state.rssPage = parseInt(splitedStr[splitedStr.length - 1]);
-        await ctx.telegram.deleteMessage(
-            cb.message.chat.id,
-            cb.message.message_id
-        );
-        await next();
+        if ('data' in cb) {
+            const splitStr = cb.data.split('_');
+            if (splitStr[1] === 'RAW') ctx.state.showRaw = true;
+            ctx.state.rssPage = parseInt(splitStr[splitStr.length - 1]);
+            await ctx.telegram.deleteMessage(
+                cb.message.chat.id,
+                cb.message.message_id
+            );
+            await next();
+        }
     },
     rss
 );
@@ -264,11 +269,14 @@ async function startFetchProcess(restartTime: number): Promise<void> {
         process.exit(1);
     }
     const fetchJS = join(__dirname, `utils/fetch.js`);
-    const execArgv = process.env.NODE_PRODUTION
+    const execArgv = process.env.NODE_PRODUCTION
         ? ['--expose-gc']
         : ['--inspect-brk=46209', '--expose-gc'];
     const child = fork(fetchJS, [], {
         execArgv
+    });
+    process.once('exit', () => {
+        child.kill(9);
     });
     child.on('message', function (message: Message | string) {
         if (typeof message === 'string') logger.info(message);

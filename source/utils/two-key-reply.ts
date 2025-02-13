@@ -1,8 +1,8 @@
-import { InlineKeyboardButton } from 'telegraf/typings/telegram-types';
-import { MContext, Next } from '../types/ctx';
+import { InlineKeyboardButton } from 'telegraf/typings/core/types/typegram';
+import { MContext, TNextFn } from '../types/ctx';
 
 interface Middleware {
-    (ctx: MContext, next?: Next): any;
+    (ctx: MContext, next?: TNextFn): any;
 }
 export default (kbs: InlineKeyboardButton[], text?: string): Middleware => {
     // text is optional default to ctx.state.replyText
@@ -19,7 +19,9 @@ export default (kbs: InlineKeyboardButton[], text?: string): Middleware => {
             text || ctx.state.replyText,
             {
                 parse_mode: 'HTML',
-                disable_web_page_preview: true,
+                link_preview_options: {
+                    is_disabled: true
+                },
                 reply_markup: {
                     inline_keyboard: [[...kbs]]
                 }

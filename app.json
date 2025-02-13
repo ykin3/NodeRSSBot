@@ -61,7 +61,7 @@
             "required": false
         },
         "RSSBOT_UA": {
-            "description": "user-agent header of the bot , version in default value is fetch from pacakge.json",
+            "description": "user-agent header of the bot , version in default value is fetch from package.json",
             "required": false
         },
         "RSSBOT_CONCURRENCY": {
@@ -92,7 +92,7 @@
             "required": false
         },
         "RSSBOT_ALLOW_LIST": {
-            "description": "allow list by user id splited by comma. You can get your userid by @userinfobot or @getidsbot",
+            "description": "allow list by user id split by comma. You can get your userid by @userinfobot or @getidsbot",
             "required": false
         }
     }

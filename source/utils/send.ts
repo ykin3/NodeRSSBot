@@ -5,7 +5,7 @@ import {
 import logger from './logger';
 import sanitize from './sanitize';
 import { config } from '../config';
-import Telegraf, { Context } from 'telegraf';
+import { Telegraf, Context } from 'telegraf';
 import { Feed, FeedItem } from '../types/feed';
 import { getUserById, migrateUser } from '../proxies/users';
 import { isNone, isSome } from '../types/option';
@@ -61,7 +61,7 @@ const send = async (
                 toSend = ejs.render(tpl, { i18n: i18n[lang] });
                 await bot.telegram.sendMessage(userId, toSend, {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true
+                    link_preview_options: { is_disabled: true }
                 });
             } catch (e) {
                 handlerSendError(e, userId);
@@ -73,24 +73,28 @@ const send = async (
             const userId = subscribe.user_id;
             let text = `<b>${sanitize(feed.feed_title)}</b>`;
             feedItems.forEach(function (item) {
-                text += `\n<a href="${item.link.trim()}">${sanitize(
-                    item.title
-                )}</a>`;
+                text += `\n<a href="${item.link.trim()}">${
+                    sanitize(item.title) || item.link.trim()
+                }</a>`;
             });
             try {
                 await bot.telegram.sendMessage(userId, text, {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true
+                    link_preview_options: {
+                        is_disabled: true
+                    }
                 });
             } catch (e) {
-                const resend = handlerSendError(e, userId);
+                const resend = await handlerSendError(e, userId);
                 if (resend && e.parameters?.migrate_to_chat_id) {
                     await bot.telegram.sendMessage(
                         e.parameters.migrate_to_chat_id,
                         text,
                         {
                             parse_mode: 'HTML',
-                            disable_web_page_preview: true
+                            link_preview_options: {
+                                is_disabled: true
+                            }
                         }
                     );
                 }

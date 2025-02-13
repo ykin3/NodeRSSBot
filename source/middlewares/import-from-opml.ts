@@ -4,7 +4,7 @@ import { transform } from 'camaro';
 import errors from '../utils/errors';
 import { sub } from '../proxies/rss-feed';
 import i18n from '../i18n';
-import { MContext, Next } from '../types/ctx';
+import { MContext, TNextFn } from '../types/ctx';
 
 const getOutlines = async function (data: string): Promise<Outline[]> {
     return await transform(data, [
@@ -17,14 +17,13 @@ const getOutlines = async function (data: string): Promise<Outline[]> {
     ]);
 };
 
-// eslint-disable-line
 export const _getOutlines = getOutlines;
-export default async (ctx: MContext, next: Next): Promise<void> => {
+export default async (ctx: MContext, next: TNextFn): Promise<void> => {
     const { fileLink, lang } = ctx.state;
 
     try {
-        const res = await got.get(fileLink);
-        const opmlStr = res.body;
+        const res = await got(fileLink);
+        const opmlStr = await res.textConverted();
         const outlines = await getOutlines(opmlStr);
         ctx.state.outlines = outlines;
         await Promise.all(
@@ -54,7 +53,7 @@ export default async (ctx: MContext, next: Next): Promise<void> => {
         } else if (e instanceof errors.ControllableError) {
             throw e;
         } else {
-            throw errors.newCtrlErr('OPML_PARSE_ERRO', e);
+            throw errors.newCtrlErr('OPML_PARSE_ERROR', e);
         }
     }
     await next();
